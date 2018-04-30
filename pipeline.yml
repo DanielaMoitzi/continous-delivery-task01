@@ -3,15 +3,39 @@ resources:
 - name: git-repository
   type: git
   source:
-    uri: "git@github.com:DanielaMoitzi/continous-delivery-task01.git"
+    uri: "https://github.com/DanielaMoitzi/continous-delivery-task01.git"
 
 jobs:
-- name: lint
+- name: dependency-check
   plan:
   - get: git-repository
-    passed: [lint]
     trigger: true
-  - task: lint
+  - task: dependency-check
+    config:
+      platform: linux
+
+      image_resource:
+        type: docker-image
+        source:
+          repository: codeclimate/codeclimate-bundler-audit
+          tag: 'latest'
+      
+      inputs:
+        - name: git-repository
+
+      run:
+        path: sh
+        dir: git-repository
+        args:
+          - -exc
+          - |
+            bundle audit check --update
+
+- name: bundle
+  plan:
+  - get: git-repository
+    trigger: true
+  - task: bundle
     config:
       platform: linux
 
@@ -25,6 +49,63 @@ jobs:
         - name: git-repository
 
       run:
-        path: echo
+        path: sh
+        dir: git-repository
         args:
-          - 'hello world'
+          - -exc
+          - |
+            bundle install
+
+
+# - name: lint
+#   plan:
+#   - get: git-repository
+#     trigger: true
+#   - task: lint
+#     config:
+#       platform: linux
+
+#       image_resource:
+#         type: docker-image
+#         source:
+#           repository: codacy/codacy-rubocop
+#           tag: 'latest'
+      
+#       inputs:
+#         - name: git-repository
+
+#       run:
+#         path: sh
+#         dir: git-repository
+#         args:
+#           - -exc
+#           - |
+#             rubocop -a
+
+
+# - name: security-scan
+#   plan:
+#   - get: git-repository
+#     trigger: true
+#   - task: security-scan
+#     config:
+#       platform: linux
+
+#       image_resource:
+#         type: docker-image
+#         source:
+#           repository: codeclimate/codeclimate-brakeman
+#           tag: 'latest'
+      
+#       inputs:
+#         - name: git-repository
+
+#       run:
+#         path: sh
+#         dir: git-repository
+#         args:
+#           - -exc
+#           - |
+#             # brakeman --summary
+#             brakeman -q
+
