@@ -1,0 +1,30 @@
+---
+resources:
+- name: git-repository
+  type: git
+  source:
+    uri: "git@github.com:DanielaMoitzi/continous-delivery-task01.git"
+
+jobs:
+- name: lint
+  plan:
+  - get: git-repository
+    passed: [lint]
+    trigger: true
+  - task: lint
+    config:
+      platform: linux
+
+      image_resource:
+        type: docker-image
+        source:
+          repository: ruby
+          tag: '2.5'
+      
+      inputs:
+        - name: git-repository
+
+      run:
+        path: echo
+        args:
+          - 'hello world'
