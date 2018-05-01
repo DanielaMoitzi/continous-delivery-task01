@@ -31,11 +31,11 @@ jobs:
           - |
             bundle audit check --update
 
-- name: bundle
+- name: lint
   plan:
   - get: git-repository
     trigger: true
-  - task: bundle
+  - task: lint
     config:
       platform: linux
 
@@ -55,58 +55,142 @@ jobs:
           - -exc
           - |
             bundle install
-            rubocop -a
+            rubocop
 
+- name: unit-tests
+  plan:
+  - get: git-repository
+    trigger: true
+  - task: unit-tests
+    config:
+      platform: linux
 
-# - name: lint
-#   plan:
-#   - get: git-repository
-#     trigger: true
-#   - task: lint
-#     config:
-#       platform: linux
-
-#       image_resource:
-#         type: docker-image
-#         source:
-#           repository: codacy/codacy-rubocop
-#           tag: 'latest'
+      image_resource:
+        type: docker-image
+        source:
+          repository: ruby
+          tag: '2.5.1'
       
-#       inputs:
-#         - name: git-repository
+      inputs:
+        - name: git-repository
 
-#       run:
-#         path: sh
-#         dir: git-repository
-#         args:
-#           - -exc
-#           - |
-#             rubocop -a
+      run:
+        path: sh
+        dir: git-repository
+        args:
+          - -exc
+          - |
+            bundle install
+            curl -sL https://deb.nodesource.com/setup_8.x | bash -
+            apt-get install -y nodejs
+            bin/rails test test/models/*.rb
 
 
-# - name: security-scan
-#   plan:
-#   - get: git-repository
-#     trigger: true
-#   - task: security-scan
-#     config:
-#       platform: linux
+- name: acceptance-tests
+  plan:
+  - get: git-repository
+    passed: [lint, unit-tests, dependency-check]
+    trigger: true
+  - task: acceptance-tests
+    config:
+      platform: linux
 
-#       image_resource:
-#         type: docker-image
-#         source:
-#           repository: codeclimate/codeclimate-brakeman
-#           tag: 'latest'
+      image_resource:
+        type: docker-image
+        source:
+          repository: ruby
+          tag: '2.5.1'
       
-#       inputs:
-#         - name: git-repository
+      inputs:
+        - name: git-repository
 
-#       run:
-#         path: sh
-#         dir: git-repository
-#         args:
-#           - -exc
-#           - |
-#             # brakeman --summary
-#             brakeman -q
+      run:
+        path: sh
+        dir: git-repository
+        args:
+          - -exc
+          - |
+            bundle install
+            curl -sL https://deb.nodesource.com/setup_8.x | bash -
+            apt-get install -y nodejs
+            bin/rails test test/controllers/*.rb
 
+
+- name: security-scan
+  plan:
+  - get: git-repository
+    trigger: true
+  - task: security-scan
+    config:
+      platform: linux
+
+      image_resource:
+        type: docker-image
+        source:
+          repository: ruby
+          tag: '2.5.1'
+      
+      inputs:
+        - name: git-repository
+
+      run:
+        dir: git-repository
+        path: sh
+        args:
+          - -exc
+          - |
+            bundle install
+            gem install brakeman
+            brakeman
+
+
+- name: deploy
+  plan:
+  - get: git-repository
+    passed: [acceptance-tests]
+    trigger: true
+  - task: deploy
+    config:
+      platform: linux
+
+      image_resource:
+        type: docker-image
+        source:
+          repository: ruby
+          tag: '2.5.1'
+      
+      inputs:
+        - name: git-repository
+
+      run:
+        path: echo
+        args:
+          - 'deploy'
+
+        
+
+- name: send-slack-message
+  plan:
+  - get: git-repository
+    passed: [deploy]
+    trigger: true
+  - task: slack-message
+    config:
+      platform: linux
+
+      image_resource:
+        type: docker-image
+        source:
+          repository: ruby
+          tag: '2.5.1'
+        
+      inputs:
+        - name: git-repository
+
+      run:
+        path: sh
+        dir: git-repository
+        args:
+          - -exc
+          - |
+            curl -X POST --data-urlencode 'payload={"channel": "((slack.channel))", "username": "pipeline", "text": "successfully deployed.", "icon_emoji": ":ghost:"}' ((slack.webhook))
